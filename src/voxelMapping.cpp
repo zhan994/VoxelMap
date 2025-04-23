@@ -132,6 +132,7 @@ geometry_msgs::PoseStamped msg_body_pose;
 
 shared_ptr<Preprocess> p_pre(new Preprocess());
 
+// api: 系统推出信号回调
 void SigHandle(int sig) {
   flg_exit = true;
   ROS_WARN("catch sig %d", sig);
@@ -231,16 +232,22 @@ void RGBpointBodyToWorld(PointType const *const pi, PointType *const po) {
   int reflection_map = intensity * 10000;
 }
 
+// api: 雷达点云回调
 void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg) {
   mtx_buffer.lock();
   // cout<<"got feature"<<endl;
+  // step: 1 防止数据回流
   if (msg->header.stamp.toSec() < last_timestamp_lidar) {
     ROS_ERROR("lidar loop back, clear buffer");
     lidar_buffer.clear();
   }
   // ROS_INFO("get point cloud at time: %.6f", msg->header.stamp.toSec());
+
+  // step: 2 预处理雷达数据
   PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
   p_pre->process(msg, ptr);
+
+  // step: 3 更新雷达和时间戳队列
   lidar_buffer.push_back(ptr);
   time_buffer.push_back(msg->header.stamp.toSec());
   last_timestamp_lidar = msg->header.stamp.toSec();
@@ -267,6 +274,7 @@ void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg) {
   sig_buffer.notify_all();
 }
 
+// api: IMU回调函数
 void imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in) {
   publish_count++;
   sensor_msgs::Imu::Ptr msg(new sensor_msgs::Imu(*msg_in));
@@ -275,12 +283,14 @@ void imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in) {
 
   mtx_buffer.lock();
 
+  // step: 1 判断数据是否时间冲突，即重置
   if (timestamp < last_timestamp_imu) {
     ROS_ERROR("imu loop back, clear buffer");
     imu_buffer.clear();
     flg_reset = true;
   }
 
+  // step: 2 更新IMU队列
   last_timestamp_imu = timestamp;
 
   imu_buffer.push_back(msg);
@@ -290,7 +300,9 @@ void imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in) {
   sig_buffer.notify_all();
 }
 
+// api: 观测数据同步
 bool sync_packages(MeasureGroup &meas) {
+  // step: 1 仅雷达数据处理
   if (!imu_en) {
     if (!lidar_buffer.empty()) {
       // cout<<"meas.lidar->points.size(): "<<meas.lidar->points.size()<<endl;
@@ -304,28 +316,35 @@ bool sync_packages(MeasureGroup &meas) {
     return false;
   }
 
+  // step: 2 判断数据是否为空
   if (lidar_buffer.empty() || imu_buffer.empty()) {
     return false;
   }
 
   /*** push a lidar scan ***/
+  // step: 3 打包当前雷达数据
   if (!lidar_pushed) {
     meas.lidar = lidar_buffer.front();
+    // step: 3.1 数据过少，丢弃
     if (meas.lidar->points.size() <= 1) {
       lidar_buffer.pop_front();
       return false;
     }
+
+    // step: 3.2 更新开始时间以及当前帧的结束时间
     meas.lidar_beg_time = time_buffer.front();
     lidar_end_time = meas.lidar_beg_time +
                      meas.lidar->points.back().curvature / double(1000);
     lidar_pushed = true;
   }
 
+  // step: 4 检查是否有新的IMU数据覆盖当前帧的雷达扫描
   if (last_timestamp_imu < lidar_end_time) {
     return false;
   }
 
   /*** push imu data, and pop from imu buffer ***/
+  // step: 5 加入所有符合雷达扫描时间范围的IMU数据
   double imu_time = imu_buffer.front()->header.stamp.toSec();
   meas.imu.clear();
   while ((!imu_buffer.empty()) && (imu_time < lidar_end_time)) {
@@ -517,6 +536,7 @@ int main(int argc, char **argv) {
   double angle_cov = 0.0;
   std::vector<double> layer_point_size;
 
+  // step: 1 参数定义
   // cummon params
   nh.param<string>("common/lid_topic", lid_topic, "/livox/lidar");
   nh.param<string>("common/imu_topic", imu_topic, "/livox/imu");
@@ -567,6 +587,7 @@ int main(int argc, char **argv) {
     layer_size.push_back(layer_point_size[i]);
   }
 
+  // step: 2 订阅 & 发布
   ros::Subscriber sub_pcl =
       p_pre->lidar_type == AVIA
           ? nh.subscribe(lid_topic, 200000, livox_pcl_cbk)
@@ -589,6 +610,7 @@ int main(int argc, char **argv) {
   path.header.stamp = ros::Time::now();
   path.header.frame_id = "camera_init";
 
+  // step: 3 变量定义
   /*** variables definition ***/
   VD(DIM_STATE) solution;
   MD(DIM_STATE, DIM_STATE) G, H_T_H, I_STATE;
@@ -603,6 +625,7 @@ int main(int argc, char **argv) {
   downSizeFilterSurf.setLeafSize(filter_size_surf_min, filter_size_surf_min,
                                  filter_size_surf_min);
 
+  // step: 4 IMU以及外参
   shared_ptr<ImuProcess> p_imu(new ImuProcess());
   p_imu->imu_en = imu_en;
   Eigen::Vector3d extT;
@@ -639,23 +662,34 @@ int main(int argc, char **argv) {
   ros::Rate rate(5000);
   bool status = ros::ok();
 
+  // step: 5 voxelmap 初始化
   // for Plane Map
   bool init_map = false;
   std::unordered_map<VOXEL_LOC, OctoTree *> voxel_map;
   last_rot << 1, 0, 0, 0, 1, 0, 0, 0, 1;
 
+  // note: 主循环
   while (status) {
+    // step: 6 判断是否退出
     if (flg_exit)
       break;
+
+    // step: 7 触发一次ROS回调
     ros::spinOnce();
+
+    // step: 8 同步所有观测数据
     if (sync_packages(Measures)) {
       // std::cout << "sync once" << std::endl;
+
+      // step: 8.1 判断数据是否回流
       if (flg_reset) {
         ROS_WARN("reset when rosbag play back");
         p_imu->Reset();
         flg_reset = false;
         continue;
       }
+
+
       std::cout << "scanIdx:" << scanIdx << std::endl;
       double t0, t1, t2, t3, t4, t5, match_start, match_time, solve_start,
           svd_time;
@@ -665,6 +699,7 @@ int main(int argc, char **argv) {
 
       // std::cout << " init rot cov:" << std::endl
       //           << state.cov.block<3, 3>(0, 0) << std::endl;
+      // step: 8.2 IMU前向，雷达去畸变
       auto undistort_start = std::chrono::high_resolution_clock::now();
       p_imu->Process(Measures, state, feats_undistort);
       auto undistort_end = std::chrono::high_resolution_clock::now();
@@ -1134,8 +1169,11 @@ int main(int argc, char **argv) {
 
       scanIdx++;
     }
+
+    // step: 9 休眠0.2ms(5000hz)
     status = ros::ok();
     rate.sleep();
   }
+
   return 0;
 }

@@ -24,6 +24,7 @@ void Preprocess::process(const livox_ros_driver::CustomMsg::ConstPtr &msg,
   *pcl_out = pl_surf;
 }
 
+// api: 点云消息预处理
 void Preprocess::process(const sensor_msgs::PointCloud2::ConstPtr &msg,
                          PointCloudXYZI::Ptr &pcl_out) {
   switch (lidar_type) {
@@ -138,6 +139,7 @@ void Preprocess::oust64_handler(const sensor_msgs::PointCloud2::ConstPtr &msg) {
   }
 }
 
+// api: l515数据处理，降采样
 void Preprocess::l515_handler(const sensor_msgs::PointCloud2::ConstPtr &msg) {
   pl_surf.clear();
   pcl::PointCloud<velodyne_ros::Point> pl_orig;
