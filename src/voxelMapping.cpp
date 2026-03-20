@@ -774,6 +774,7 @@ int main(int argc, char **argv) {
           sigma_pv[2] = sqrt(sigma_pv[2]);
         }
 
+        // todo: 初始化地图
         buildVoxelMap(pv_list, max_voxel_size, max_layer, layer_size,
                       max_points_size, max_points_size, min_eigen_value,
                       voxel_map);
@@ -784,6 +785,7 @@ int main(int argc, char **argv) {
 
         scanIdx++;
         if (publish_voxel_map) {
+          // todo: 发布地图
           pubVoxelMap(voxel_map, publish_max_voxel_layer, voxel_map_pub);
         }
         init_map = true;
@@ -825,6 +827,7 @@ int main(int argc, char **argv) {
           point_this[2] = 0.001;
         }
         M3D cov;
+        // todo: 计算body坐标系下点云的协方差，考虑激光测距误差和角度误差
         calcBodyCov(point_this, ranging_cov, angle_cov, cov);
         M3D point_crossmat;
         point_crossmat << SKEW_SYM_MATRX(point_this);
@@ -874,6 +877,7 @@ int main(int argc, char **argv) {
         }
         auto scan_match_time_start = std::chrono::high_resolution_clock::now();
         std::vector<V3D> non_match_list;
+        // todo: 构建残差列表，包含每个点的残差、对应的平面参数以及协方差
         BuildResidualListOMP(voxel_map, max_voxel_size, 3.0, max_layer, pv_list,
                              ptpl_list, non_match_list);
 

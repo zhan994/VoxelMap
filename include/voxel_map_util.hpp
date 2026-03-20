@@ -89,7 +89,7 @@ public:
   std::vector<pointWithCov> new_points_;  // new points in an octo tree
   Plane *plane_ptr_;
   int max_layer_;
-  bool indoor_mode_;
+  bool indoor_mode_; // 无效
   int layer_;
   int octo_state_; // 0 is end of tree, 1 is not
   OctoTree *leaves_[8];
@@ -156,12 +156,15 @@ public:
     Eigen::Vector3d evecMid = evecs.real().col(evalsMid);
     Eigen::Vector3d evecMax = evecs.real().col(evalsMax);
     // plane covariance calculation
-    Eigen::Matrix3d J_Q;
+    Eigen::Matrix3d J_Q; // center covariance jacobian
     J_Q << 1.0 / plane->points_size, 0, 0, 0, 1.0 / plane->points_size, 0, 0, 0,
         1.0 / plane->points_size;
+    // when plane is detected, calculate plane covariance with point covariance    
     if (evalsReal(evalsMin) < planer_threshold_) {
       std::vector<int> index(points.size());
       std::vector<Eigen::Matrix<double, 6, 6>> temp_matrix(points.size());
+
+      // normal vector jacobian
       for (int i = 0; i < points.size(); i++) {
         Eigen::Matrix<double, 6, 3> J;
         Eigen::Matrix3d F;
@@ -213,6 +216,7 @@ public:
       }
 
     } else {
+      // when plane is not detected, only calculate plane normal and radius
       if (!plane->is_init) {
         plane->id = plane_id;
         plane_id++;
