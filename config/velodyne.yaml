@@ -33,9 +33,9 @@ imu:
                    0, 0, 1]
 
 visualization:
-    pub_voxel_map: false
+    pub_voxel_map: true
     publish_max_voxel_layer: 1         # only publish 0,1,2 layer's plane
-    pub_point_cloud: false
+    pub_point_cloud: true
     dense_map_enable: false
     pub_point_cloud_skip: 5             # publish one points per five points
 
