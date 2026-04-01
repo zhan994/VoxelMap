@@ -88,4 +88,8 @@ add_executable(voxel_mapping_odom src/voxelMapping.cpp  src/preprocess.cpp)
 target_link_libraries(voxel_mapping_odom ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 target_include_directories(voxel_mapping_odom PRIVATE ${PYTHON_INCLUDE_DIRS})
 
+add_executable(voxel_mapping_odom_new src/voxelMapping_refactored.cpp  src/preprocess.cpp)
+target_link_libraries(voxel_mapping_odom_new ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+target_include_directories(voxel_mapping_odom_new PRIVATE ${PYTHON_INCLUDE_DIRS})
+
 
